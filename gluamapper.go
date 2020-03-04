@@ -5,14 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"github.com/mitchellh/mapstructure"
-	"github.com/yuin/gopher-lua"
+	"github.com/AzureWrathCyd/gopher-lua"
 	"regexp"
 	"strings"
 )
 
 // Option is a configuration that is used to create a new mapper.
 type Option struct {
-	// Function to convert a lua table key to Go's one. This defaults to "ToUpperCamelCase".
+	// Function to convert a lua table key to Go's one. This defaults to "ToUpperCamelCase".go
 	NameFunc func(string) string
 
 	// Returns error if unused keys exist.
@@ -41,7 +41,7 @@ func NewMapper(opt Option) *Mapper {
 // Map maps the lua table to the given struct pointer.
 func (mapper *Mapper) Map(tbl *lua.LTable, st interface{}) error {
 	opt := mapper.Option
-	mp, ok := ToGoValue(tbl, opt).(map[interface{}]interface{})
+	mp, ok := ToGoValue("", tbl, opt).(map[interface{}]interface{})
 	if !ok {
 		return errors.New("arguments #1 must be a table, but got an array")
 	}
@@ -76,7 +76,7 @@ func ToUpperCamelCase(s string) string {
 }
 
 // ToGoValue converts the given LValue to a Go object.
-func ToGoValue(lv lua.LValue, opt Option) interface{} {
+func ToGoValue(name string, lv lua.LValue, opt Option) interface{} {
 	switch v := lv.(type) {
 	case *lua.LNilType:
 		return nil
@@ -87,22 +87,26 @@ func ToGoValue(lv lua.LValue, opt Option) interface{} {
 	case lua.LNumber:
 		return float64(v)
 	case *lua.LTable:
-		maxn := v.MaxN()
-		if maxn == 0 { // table
+		if isForceDecodeMap(name) || !v.IsArray() { // table
 			ret := make(map[interface{}]interface{})
 			v.ForEach(func(key, value lua.LValue) {
-				keystr := fmt.Sprint(ToGoValue(key, opt))
-				ret[opt.NameFunc(keystr)] = ToGoValue(value, opt)
+				keystr := fmt.Sprint(ToGoValue("",key, opt))
+				ret[opt.NameFunc(keystr)] = ToGoValue(keystr,value, opt)
 			})
 			return ret
 		} else { // array
+			maxn := v.MaxN()
 			ret := make([]interface{}, 0, maxn)
 			for i := 1; i <= maxn; i++ {
-				ret = append(ret, ToGoValue(v.RawGetInt(i), opt))
+				ret = append(ret, ToGoValue("",v.RawGetInt(i), opt))
 			}
 			return ret
 		}
 	default:
 		return v
 	}
+}
+
+func isForceDecodeMap(name string) bool {
+	return strings.HasSuffix(strings.ToUpper(name), "MAP")
 }
